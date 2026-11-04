@@ -11,7 +11,7 @@ Eksperymentalny agent AI, który korzysta z narzędzi do wyszukiwania publikacji
 - REST API w FastAPI + automatyczna dokumentacja `/docs`.
 - `GET /api/search`: wyszukiwanie przykładów (offline) lub publikacji przez OpenAlex.
 - `POST /api/quality`: jawna, deterministyczna analiza braków w metadanych.
-- `POST /api/ask`: opcjonalny agent LLM z **realnym function/tool calling**, dwoma narzędziami i limitem wywołań. Wymaga osobnego klucza API i może generować koszty.
+- `POST /api/ask`: opcjonalny agent LLM z **realnym function/tool calling**, dwoma narzędziami i limitem wywołań. Domyślnie lokalny Ollama (brak opłat API); opcjonalnie płatny OpenAI API.
 - Testy pytest, CI GitHub Actions, Dockerfile.
 
 **Nie działa jeszcze:** integracja z Biblioteką Nauki, pełny RAG, deduplikacja, panel administracyjny, pomiar jakości agentów. To planowane etapy, nie część obecnego MVP.
@@ -64,9 +64,27 @@ W `.env` ustaw `DATA_BACKEND=openalex`. Opcjonalnie dodaj `OPENALEX_API_KEY` z w
 
 Dokumentacja: https://help.openalex.org/api/ oraz https://help.openalex.org/api/searching/.
 
-## Włączenie agenta AI
+## Włączenie lokalnego agenta AI — Ollama (bez opłat API)
 
-W `.env` ustaw `OPENAI_API_KEY=...` i (w razie potrzeby) `OPENAI_MODEL=...`. Nie umieszczaj sekretów w Git!
+Po zastosowaniu zmian w istniejącej konfiguracji dodaj do lokalnego `.env`:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=qwen3:4b
+OLLAMA_BASE_URL=http://ollama:11434/v1
+```
+
+Własny `OPENAI_API_KEY` nie jest potrzebny. W katalogu repozytorium:
+
+```bash
+docker compose up -d --build
+docker compose exec ollama ollama pull qwen3:4b
+docker compose exec ollama ollama list
+```
+
+Pierwsze uruchomienie pobierze model (~2.5 GB). Wymagane jest miejsce na dysku.
+Nie uruchamiaj modelu `:cloud` — jest to usługa chmurowa.
+Ollama dostępna jest w Compose jako `http://ollama:11434` i na lokalnym komputerze pod `http://127.0.0.1:11434`.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/api/ask \
@@ -74,7 +92,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask \
   -d '{"question":"Znajdź publikacje o Kubernetes i oceń kompletność ich metadanych."}'
 ```
 
-Agent wykorzystuje Responses API i rzeczywiste wywołania funkcji. Bez poprawnego klucza `/api/ask` zwróci 503; pozostałe endpointy działają normalnie. **Zwykła subskrypcja ChatGPT nie jest kluczem API** i nie pokrywa automatycznie opłat za API.
+Agent wykorzystuje zgodne z OpenAI Responses API oraz wywołania funkcji. W trybie lokalnym nie wymaga klucza. Nie wystawiaj portu modelu ani endpointu agenta publicznie. Tryb OpenAI pozostaje opcjonalny, ale wymaga własnego klucza API i może generować opłaty.
 
 ## Testy / jakość
 

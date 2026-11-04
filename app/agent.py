@@ -52,24 +52,36 @@ async def _dispatch(name: str, args: dict) -> dict:
 
 
 async def ask(question: str) -> dict:
-    if not os.getenv("OPENAI_API_KEY", "").strip():
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    if provider not in {"openai", "ollama"}:
+        raise RuntimeError("LLM_PROVIDER must be 'openai' or 'ollama'")
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if provider == "openai" and not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=30.0, max_retries=1)
-    model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+    if provider == "ollama":
+        # The local Ollama API ignores this SDK-required placeholder key.
+        client = AsyncOpenAI(
+            api_key="ollama",
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434/v1"),
+            timeout=180.0,
+            max_retries=0,
+        )
+        model = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+    else:
+        client = AsyncOpenAI(api_key=api_key, timeout=30.0, max_retries=1)
+        model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
     messages: list = [{"role": "user", "content": question}]
     trace: list[dict] = []
 
     for _ in range(4):
-        response = await client.responses.create(
-            model=model,
-            instructions=INSTRUCTIONS,
-            input=messages,
-            tools=TOOLS,
-            parallel_tool_calls=False,
-            tool_choice="required" if not trace else "auto",
-        )
+        request = dict(model=model, instructions=INSTRUCTIONS, input=messages, tools=TOOLS)
+        if provider == "openai":
+            # Ollama's OpenAI-compatible Responses API does not support
+            # these two OpenAI-specific request parameters.
+            request.update(parallel_tool_calls=False, tool_choice="required" if not trace else "auto")
+        response = await client.responses.create(**request)
         messages.extend(response.output)
         calls = [item for item in response.output if item.type == "function_call"]
         if not calls:

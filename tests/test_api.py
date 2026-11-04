@@ -23,6 +23,7 @@ async def test_quality_api():
 
 @pytest.mark.asyncio
 async def test_agent_requires_key(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/ask", json={"question": "Find articles about Kubernetes"})
