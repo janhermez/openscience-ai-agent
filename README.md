@@ -144,6 +144,53 @@ python -m compileall -q app
 
 The current tests run offline and exercise application/API and deterministic validation behavior. GitHub Actions provides CI. **These tests do not establish the accuracy or reliability of the LLM agent.**
 
+
+## Example: local agent with tool calling
+
+The following demonstration runs entirely locally using **Ollama and Qwen3:4b**, with synthetic publication metadata.
+
+**User request:**
+
+> Find publications about Kubernetes and assess their metadata completeness.
+
+**Agent workflow:**
+
+1. `search_publications` — retrieves two demonstration records.
+2. `assess_metadata` — applies deterministic metadata completeness checks.
+3. Qwen3 summarizes the findings.
+
+**Example results:**
+
+| Publication | Completeness score | Findings |
+|---|---:|---|
+| Kubernetes and microservices: a demonstration dataset | 100/100 | No missing fields detected |
+| Kubernetes in research infrastructure | 70/100 | Missing DOI and abstract |
+
+**Tool trace:**
+
+```json
+{
+  "tool_trace": [
+    {
+      "tool": "search_publications",
+      "arguments": {"query": "Kubernetes"},
+      "result_count": 2
+    },
+    {
+      "tool": "assess_metadata",
+      "arguments": {"query": "Kubernetes"},
+      "result_count": 2
+    }
+  ],
+  "model": "qwen3:4b"
+}
+```
+
+**Validation:** Eight automated tests passed locally with pytest.
+
+**Limitations:** This demonstration uses synthetic data. Completeness scores are heuristic and do not measure scientific quality. Agent responses require independent evaluation before production use.
+
+
 ## Known limitations
 
 - The metadata quality score is a simplified **completeness heuristic**, not an assessment of a publication's scientific merit.
