@@ -1,72 +1,94 @@
-# OpenScience AI Agent — MVP (portfolio + potencjalna praca magisterska)
+# OpenScience AI Agent
 
-**Status:** wersja demonstracyjna / proof of concept. Projekt niezależny — **nie jest usługą Biblioteki Nauki ani ICM UW**.
+**A local-first Python AI agent for exploring scholarly publications and checking metadata completeness.**
 
-## Cel
+> **Status:** MVP / proof of concept. This is an independent portfolio project, not an official service of the University of Warsaw, ICM UW, or Biblioteka Nauki.
 
-Eksperymentalny agent AI, który korzysta z narzędzi do wyszukiwania publikacji i sprawdzania jakości metadanych. Wersja 0.1 obsługuje **syntetyczne rekordy testowe** (domyślnie) lub publiczne API OpenAlex; nie podłącza się do infrastruktury pracodawcy.
+## Why this project?
 
-### Co już działa
+Scholarly metadata can contain missing or inconsistent fields. Checking records manually does not scale well, while a language model may produce plausible but incorrect details.
 
-- REST API w FastAPI + automatyczna dokumentacja `/docs`.
-- `GET /api/search`: wyszukiwanie przykładów (offline) lub publikacji przez OpenAlex.
-- `POST /api/quality`: jawna, deterministyczna analiza braków w metadanych.
-- `POST /api/ask`: opcjonalny agent LLM z **realnym function/tool calling**, dwoma narzędziami i limitem wywołań. Domyślnie lokalny Ollama (brak opłat API); opcjonalnie płatny OpenAI API.
-- Testy pytest, CI GitHub Actions, Dockerfile.
+This prototype explores a practical separation of responsibilities:
 
-**Nie działa jeszcze:** integracja z Biblioteką Nauki, pełny RAG, deduplikacja, panel administracyjny, pomiar jakości agentów. To planowane etapy, nie część obecnego MVP.
+- **Deterministic Python rules** identify selected missing metadata fields.
+- **An LLM agent** uses explicit tools to search publications and request metadata-quality checks.
+- **Public OpenAlex data or synthetic examples** make it possible to experiment without access to institutional infrastructure.
 
-## Uruchomienie — Docker Desktop / WSL (najprostszy start)
+The goal is to test where an LLM adds value beyond conventional validation rules, not to assume that an LLM is always the better solution.
 
-```bash
-unzip openscience-ai-agent-starter.zip
-cd openscience-ai-agent-starter
-cp .env.example .env
-docker compose up --build
+## Implemented features
+
+| Feature | Status |
+| --- | --- |
+| REST API with FastAPI and interactive `/docs` | Implemented |
+| `GET /api/search` — search synthetic examples or OpenAlex | Implemented |
+| `POST /api/quality` — rule-based metadata completeness checks | Implemented |
+| `POST /api/ask` — LLM agent with two callable tools and a call limit | Implemented (optional LLM setup) |
+| Local Ollama model (`qwen3:4b`) | Supported |
+| Docker-based development setup | Available |
+| Offline pytest tests and GitHub Actions CI | Available |
+| Systematic LLM evaluation / benchmark metrics | Not implemented yet |
+| RAG, deduplication, admin UI | Not implemented |
+
+**Core tools:** publication search and metadata-quality assessment. The agent uses function/tool calling rather than only generating an answer from a prompt.
+
+## Tech stack
+
+**Python 3.11+ · FastAPI · pytest · Docker · Ollama · Qwen3 · OpenAlex API · GitHub Actions**
+
+## How it works
+
+```text
+                    Client / HTTP request
+                             |
+                         FastAPI
+                   /api/search | /api/quality
+                             |      (direct API calls)
+                             |
+                          /api/ask
+                             |
+                     LLM agent (optional)
+                             |
+                       tool calling
+                        /       \
+             publication search  quality assessment
+                     |                  |
+             synthetic records     Python rules
+                or OpenAlex
 ```
 
-Otwórz http://127.0.0.1:8000/docs — dalej możesz testować polecenia `curl` z poniższej sekcji.
+The default data source is synthetic test data. OpenAlex mode is optional and uses a public external API.
 
-## Uruchomienie bez Dockera — WSL/Linux
+## Quick start: offline API demo
 
-Wymagany Python 3.11+ (sprawdź `python3 --version`; Ubuntu 20.04 może mieć domyślnie starszego Pythona). Jeśli już rozpakowałeś projekt podczas uruchamiania Dockera, nie rozpakowuj go ponownie.
+**Requirements:** Docker with Docker Compose, or Python 3.11+ for a local installation.
 
 ```bash
-unzip openscience-ai-agent-starter.zip
-cd openscience-ai-agent-starter
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+git clone https://github.com/janhermez/openscience-ai-agent.git
+cd openscience-ai-agent
 cp .env.example .env
-uvicorn app.main:app --reload
+docker compose up --build -d
 ```
 
-Otwórz: http://127.0.0.1:8000/docs
+Open **http://127.0.0.1:8000/docs** to explore the API.
 
-W drugim terminalu:
+Search the synthetic examples:
 
 ```bash
 curl 'http://127.0.0.1:8000/api/search?query=kubernetes'
-pytest -q
 ```
 
-Aby sprawdzić reguły jakości (bez LLM):
+Run a deterministic metadata check (no LLM required):
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/api/quality \
+curl -s -X POST 'http://127.0.0.1:8000/api/quality' \
   -H 'Content-Type: application/json' \
-  -d '{"id":"demo","title":"Testowy artykuł","publication_year":2025,"doi":null,"authors":["A. Nowak"],"abstract":null,"source":"manual"}'
+  -d '{"id":"demo","title":"Sample article","publication_year":2025,"doi":null,"authors":["A. Nowak"],"abstract":null,"source":"manual"}'
 ```
 
-## Tryb Live — OpenAlex
+## Run the AI agent locally with Ollama
 
-W `.env` ustaw `DATA_BACKEND=openalex`. Opcjonalnie dodaj `OPENALEX_API_KEY` z własnego konta; serwis ma limity i zasady używania. W trybie live zapytania wysyłane są na zewnętrzne API, więc nie wprowadzaj danych wewnętrznych ani poufnych. Otwórz ponownie `/api/search?query=...`.
-
-Dokumentacja: https://help.openalex.org/api/ oraz https://help.openalex.org/api/searching/.
-
-## Włączenie lokalnego agenta AI — Ollama (bez opłat API)
-
-Po zastosowaniu zmian w istniejącej konfiguracji dodaj do lokalnego `.env`:
+Set the following values in your local `.env`:
 
 ```env
 LLM_PROVIDER=ollama
@@ -74,54 +96,73 @@ OLLAMA_MODEL=qwen3:4b
 OLLAMA_BASE_URL=http://ollama:11434/v1
 ```
 
-Własny `OPENAI_API_KEY` nie jest potrzebny. W katalogu repozytorium:
+Then start the services and download the local model:
 
 ```bash
 docker compose up -d --build
 docker compose exec ollama ollama pull qwen3:4b
-docker compose exec ollama ollama list
 ```
 
-Pierwsze uruchomienie pobierze model (~2.5 GB). Wymagane jest miejsce na dysku.
-Nie uruchamiaj modelu `:cloud` — jest to usługa chmurowa.
-Ollama dostępna jest w Compose jako `http://ollama:11434` i na lokalnym komputerze pod `http://127.0.0.1:11434`.
+Try a tool-using request:
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/api/ask \
+curl -s -X POST 'http://127.0.0.1:8000/api/ask' \
   -H 'Content-Type: application/json' \
-  -d '{"question":"Znajdź publikacje o Kubernetes i oceń kompletność ich metadanych."}'
+  -d '{"question":"Find publications about Kubernetes and assess their metadata completeness."}'
 ```
 
-Agent wykorzystuje zgodne z OpenAI Responses API oraz wywołania funkcji. W trybie lokalnym nie wymaga klucza. Nie wystawiaj portu modelu ani endpointu agenta publicznie. Tryb OpenAI pozostaje opcjonalny, ale wymaga własnego klucza API i może generować opłaty.
+The model runs locally through Ollama; **no paid LLM API key is required** for this setup. The model must be downloaded before the agent can use it. An optional external OpenAI API provider is also supported, but may incur charges.
 
-## Testy / jakość
+**Important:** Do not expose the unauthenticated agent endpoint or Ollama service to the public internet.
+
+## Use live OpenAlex data
+
+Set `DATA_BACKEND=openalex` in `.env` and restart the application. You may also configure `OPENALEX_API_KEY` if required by your OpenAlex account or current API limits.
+
+The app will then query the external OpenAlex API instead of its synthetic default examples. Use only public, permitted data and respect the API's policies and limits.
+
+- [OpenAlex API documentation](https://docs.openalex.org/)
+
+## Run without Docker
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload
+```
+
+Use a supported Python version; some older Linux distributions ship an older Python by default. Local LLM inference still requires a separately configured compatible model service.
+
+## Tests and engineering practices
 
 ```bash
 pytest -q
 python -m compileall -q app
 ```
 
-Testy są offline; nie dokonują wywołań do OpenAlex ani OpenAI. Wstępne testy oceniają jedynie reguły i API, **nie skuteczność systemu AI**.
+The current tests run offline and exercise application/API and deterministic validation behavior. GitHub Actions provides CI. **These tests do not establish the accuracy or reliability of the LLM agent.**
 
-## Kierunek rozwoju
+## Known limitations
 
-1. MVP: wyszukiwanie + reguły + tool calling + testy (ten pakiet).
-2. Adapter Biblioteki Nauki: dopiero po sprawdzeniu oficjalnego, dozwolonego interfejsu, polityki użycia i autoryzacji organizacyjnej; bez modyfikowania produkcji.
-3. Deduplikacja DOI, normalizacja autorów, jakościowe reguły specyficzne dla schematów i typów rekordów.
-4. Porównanie: reguły vs LLM vs rozwiązanie hybrydowe, anotowany zbiór, precision/recall/F1, analiza błędów, koszt i latency.
-5. RAG dla opisów i dokumentacji, monitoring, konteneryzacja, raport naukowy.
+- The metadata quality score is a simplified **completeness heuristic**, not an assessment of a publication's scientific merit.
+- Missing DOIs and abstracts can be legitimate for certain record types.
+- LLM output may contain fabricated or malformed identifiers; publication metadata must be checked against source records before being trusted.
+- No systematic evaluation dataset, precision/recall/F1 results, or latency/cost benchmark has been published yet.
+- Deduplication, RAG, user authentication, rate limiting, and a production deployment are out of scope for the current MVP.
+- External metadata is untrusted input, not an instruction source for the agent.
 
-## Pomysł na pracę magisterską
+## Next steps
 
-**„Ocena skuteczności podejścia hybrydowego (reguły walidacyjne + modele językowe) w wykrywaniu problemów jakości metadanych publikacji naukowych”.**
+1. Add a small, annotated evaluation set with reproducible test questions and expected results.
+2. Check DOI formatting and ensure that identifiers in answers match the retrieved source records.
+3. Compare **rules-only**, **LLM-only**, and **hybrid** approaches using documented metrics and error cases.
+4. Improve error handling, observability, and API tests.
+5. Add more metadata checks only when supported by real use cases.
 
-Pytania badawcze: czy LLM poprawia skuteczność wykrywania problemów względem reguł? Jakie błędy popełnia? Ile kosztuje analiza jednego rekordu? Czy wyniki są reprodukowalne? Należy uzgodnić temat i metodologię z promotorem oraz formalnie uregulować ewentualne wykorzystanie danych lub wiedzy wewnętrznej z pracy.
+## Project independence and responsible use
 
-## Bezpieczeństwo i ograniczenia
+This is a personal learning and portfolio project based on synthetic data and publicly accessible interfaces. It does not access employer systems or use confidential institutional data. Secrets belong in a local `.env` file and must never be committed to the repository.
 
-- Używaj tylko publicznych danych i dozwolonych endpointów. Pliki `data/examples.json` są **syntetyczne** i służą do demonstracji.
-- Wynik „quality score” to uproszczona heurystyka, **nie ocena wartości naukowej publikacji**. DOI i abstrakt mogą być prawidłowo nieobecne w pewnych typach rekordów.
-- Tekst metadanych jest traktowany jako dane niezaufane, a nie instrukcje dla agenta.
-- Klucz API trzymamy w `.env`; nie logujemy sekretów ani nie commitujemy danych pracodawcy.
-- Endpoint `/api/ask` nie ma jeszcze uwierzytelniania ani rate limitu. **Nie wystawiaj go publicznie z działającym kluczem**; przeznaczony jest do lokalnego developmentu.
-- Przed publicznym udostępnieniem repozytorium wybierz licencję i sprawdź prawa do wykorzystywanych danych.
+A potential research study of metadata quality is a future direction, not a claim that a thesis or scientific evaluation has already been completed.
